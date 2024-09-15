@@ -1,0 +1,184 @@
+---
+title: "Reading and Combining Data"
+format: html
+editor: visual
+---
+
+## Task 1: Conceptual Questions
+
+1.  If your working directory is `myfolder/homework/`, what *relative* path would you specify to get the file located at `myfolder/MyData.csv`?
+
+    > `"../MyData.csv"`
+
+2.  What are the major benefits of using R projects?
+
+    > R projects establish a directory or remote repository to keep related files together. For instance, scripts, markdown documents and source data files can be kept together. For source files, this allows more consistent the use of relative paths. Workspace and history can be associated with a unique project context as well.
+
+3.  What is git and what is github?
+
+    > Git is an open source version control system for keeping track of changes to code and other files in projects. It is used by individuals, teams or organizations. GitHub is a cloud-based remote repository service. GitHub supports and extends Git's version control with features such as task management.
+
+4.  What are the two main differences between a tibble and a data.frame?
+
+    > Tibbles are designed to print only the first several rows and a number of columns optimized to the screen real estate (as well as abbreviated column types). Also, tibbles do not simplify. Tibbles subset somewhat differently, and more consistently, than dataframes. In tibbles, \[ \] always returns a tibble, while in dataframes it might return a dataframe or a vector. Also, dataframes will execute partial matching when subsetting while tibbles will not.
+
+5.  Rewrite the following nested function call using BaseR’s chaining operator:\
+    `arrange(filter(select(as_tibble(iris), starts_with("Petal"), Species), Petal.Length < 1.55), Species)`
+
+    > `iris |>   as_tibble() |>   select(starts_with("Petal"), Species) |>   filter(Petal.Length < 1.55) |>   arrange(Species)`
+
+## Task 2: Reading Delimited Data
+
+Load tidyverse.
+
+```{r}
+library(tidyverse)
+```
+
+### Glass data
+
+Read `glass.data` into `R` directly from the URL.
+
+```{r}
+glass_cols = c("id", "refractive_index", "sodium", "magnesium", "aluminum", "silicon", "potassium", "calcium", "barium", "iron", "glass_type")
+
+glass_data <- read_csv(
+  "https://www4.stat.ncsu.edu/online/datasets/glass.data",
+  col_names = glass_cols
+  )
+glass_data
+```
+
+Start a chain that overwrites the `glass_type` variable using `mutate()`. Continue the chain and keep only observations where the `iron` variable is less than 0.2 and `glass_type` is either “tableware” or “headlamp”.
+
+```{r}
+glass_data |>
+  mutate(glass_type = as.factor(glass_type)) |>
+  mutate(glass_type = fct_recode(glass_type,
+  "building_windows_float_processed" = "1",
+  "building_windows_non_float_processed" = "2",
+  "vehicle_windows_float_processed" = "3",
+  "containers" = "5",
+  "tableware" = "6",
+  "headlamps" = "7"
+  )
+  ) |>
+  filter(
+    iron < 0.2 & (glass_type == "tableware" | glass_type == "headlamps")
+  )
+```
+
+### Yeast data
+
+Read `yeast.data` into `R` directly from the URL.
+
+```{r}
+yeast_cols = c("seq_name", "mcg", "gvh", "alm", "mit", "erl", "pox", "vac","nuc", "class")
+
+yeast_data <- read_table(
+  "https://www4.stat.ncsu.edu/online/datasets/yeast.data",
+  col_names = yeast_cols
+  )
+yeast_data
+```
+
+Start a chain that removes the `seq_name` and `nuc` columns. Continue the chain to add columns corresponding to the *mean* and *median* of each numeric variable at each `class` grouping.
+
+```{r}
+yeast_data |>
+  select(!c(seq_name, nuc)) |>
+  group_by(class) |>
+  mutate(across(where(is.numeric), list(mean = mean, median = median), .names = "{.col}_{.fn}"))
+```
+
+## Task 3: Combining Excel and Delimited Data
+
+Load `readxl` package.
+
+```{r}
+library(readxl)
+```
+
+### White wine
+
+Download **white wine** Excel file from URL and place in project working directory. Import data from the first sheet using the `readxl` package. Print the tibble.
+
+```{r}
+download.file("https://www4.stat.ncsu.edu/~online/datasets/white-wine.xlsx", "white-wine.xlsx")
+
+
+white_wine <- read_xlsx("white-wine.xlsx", sheet = 1)
+white_wine
+```
+
+Read in data from 2nd sheet in **white wine** Excel file, returning a data frame with a column containing alternative versions of the variable names.
+
+```{r}
+white_wine_cols <- read_xlsx("white-wine.xlsx", sheet = 2)
+white_wine_cols
+```
+
+Grab above column and overwrite the current column names for the `white_wine` tibble.
+
+```{r}
+colnames(white_wine) <- white_wine_cols[[1]]
+white_wine
+```
+
+Add a column to `white_wine` tibble to indicate all these wines are "white".
+
+```{r}
+white_wine$type <- "white"
+white_wine
+```
+
+### Red wine
+
+Read in **red wine** data set from URL using the `readr` package.
+
+```{r}
+red_wine <- read_delim("https://www4.stat.ncsu.edu/~online/datasets/red-wine.csv", delim = ";", col_types = cols(.default = "d"))
+red_wine
+```
+
+Overwrite the current column names for the `red_wine` tibble with same used for `white_wine` tibble.
+
+```{r}
+colnames(red_wine) <- white_wine_cols[[1]]
+red_wine
+```
+
+Add a column to `red_wine` tibble to indicate all these wines are "red".
+
+```{r}
+red_wine$type <- "red"
+red_wine
+```
+
+### Combined wine data
+
+Combine `white_wine` and `red_wine` data sets into a single data set, `wine`.
+
+```{r}
+wine <- bind_rows(list(white_wine, red_wine))
+wine
+```
+
+Execute the following chain on the `wine` tibble:
+
+-   Filter the data to only look at high-quality wines (`quality` \> 6.5) and wines that have a reasonable alcohol value (`alcohol` \< 132)
+-   Sort the data from highest quality to lowest
+-   Select only the variables that contain "acid", the `alcohol` variable, the `type` variable and the `quality` variable
+-   Add the *mean* and *standard deviation* of the `alcohol` variable to the data set for each setting of the `quality` variable
+
+```{r}
+wine |>
+  filter(quality > 6.5 & alcohol < 132) |>
+  arrange(desc(quality)) |>
+  select(contains("acid"), alcohol:type) |>
+  group_by(quality) |>
+  mutate(
+    alcohol_mean = mean(alcohol),
+    alcohol_sd = sd(alcohol)
+    )
+```
